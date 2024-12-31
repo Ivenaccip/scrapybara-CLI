@@ -37,6 +37,32 @@ list_and_check_files() {
     done
 }
 
+# Función para ejecutar archivos Python
+execute_python_file() {
+    local file=$1
+
+    # Verificar si el archivo existe
+    if [[ -f "$file" ]]; then
+        # Si el archivo es un script Python
+        if [[ "$file" == *.py ]]; then
+            echo -e "${BLUE}Ejecutando archivo Python: $file${RESET}"
+
+            # Verificar si el comando ya incluye python3
+            if [[ "$file" == *.py && ! "$command" =~ ^python3 ]]; then
+                echo -e "${YELLOW}Agregando 'python3' automáticamente...${RESET}"
+                python3 "$file"
+            else
+                # Si ya incluye python3, simplemente ejecuta el comando
+                eval "$command"
+            fi
+        else
+            echo -e "${RED}El archivo $file no es un script Python.${RESET}"
+        fi
+    else
+        echo -e "${RED}El archivo $file no existe.${RESET}"
+    fi
+}
+
 # Bucle principal para leer comandos
 while true; do
     # Mostrar el prompt personalizado
@@ -50,9 +76,12 @@ while true; do
         break
     fi
 
-    # Ejecutar `ls` con verificación de compatibilidad
+    # Si el comando es `ls`, listamos y verificamos compatibilidad
     if [[ "$command" == "ls" ]]; then
         list_and_check_files
+    elif [[ "$command" == *.py ]]; then
+        # Si el comando tiene terminación .py, ejecutamos con `python3` automáticamente
+        execute_python_file "$command"
     else
         # Ejecutar el comando ingresado
         eval "$command"
