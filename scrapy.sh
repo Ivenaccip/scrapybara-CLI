@@ -10,35 +10,59 @@ YELLOW="\e[33m"
 BLUE="\e[34m"
 RED="\e[31m"
 
-# Verificar si existe el archivo de log, si no, crear uno
+# Verificar si existe el archivo de log, si no, crearlo
 if [[ ! -f $LOG_FILE ]]; then
     echo "Generando archivo de log: $LOG_FILE"
     touch $LOG_FILE
 fi
 
-# Función para verificar compatibilidad de los scripts
-check_compatibility() {
-    echo -e "${YELLOW}Verificando compatibilidad de los scripts en el folder actual...${RESET}"
-    compatible_count=0
-    incompatible_count=0
-
-    # Buscar todos los archivos .py en el directorio actual
-    for file in *.py; do
-        if [[ -f "$file" ]]; then
-            # Verificar si contiene la línea "from scrapybara import Scrapybara"
-            if grep -q "from scrapybara import Scrapybara" "$file"; then
-                echo -e "${GREEN}[COMPATIBLE] $file${RESET}"
-                ((compatible_count++))
-            else
-                echo -e "${RED}[NO COMPATIBLE] $file${RESET}"
-                ((incompatible_count++))
+# Función para verificar si `requirements.txt` está instalado
+check_requirements_installed() {
+    if [[ -f "requirements.txt" ]]; then
+        echo -e "${YELLOW}Verificando si requirements.txt está instalado...${RESET}"
+        pip freeze > installed_packages.txt
+        while read -r package; do
+            if ! grep -q "$package" installed_packages.txt; then
+                echo -e "${RED}Falta instalar: $package${RESET}"
+                echo "Error: Se debe de instalar requirements.txt" | tee -a "$LOG_FILE"
+                return 1
             fi
-        fi
-    done
+        done < requirements.txt
+        echo -e "${GREEN}Todos los paquetes están instalados.${RESET}" | tee -a "$LOG_FILE"
+        rm installed_packages.txt
+    else
+        echo -e "${RED}Error: No se encontró el archivo requirements.txt${RESET}" | tee -a "$LOG_FILE"
+        return 1
+    fi
+}
 
-    echo -e "${BLUE}Resultados:${RESET}"
-    echo "Scripts compatibles: $compatible_count" | tee -a "$LOG_FILE"
-    echo "Scripts no compatibles: $incompatible_count" | tee -a "$LOG_FILE"
+# Función para verificar las llaves de API
+check_api_keys() {
+    local missing_keys=0
+    if [[ -z "$ANTHROPIC_API_KEY" ]]; then
+        echo -e "${RED}Error: Falta la llave ANTHROPIC_API_KEY.${RESET}" | tee -a "$LOG_FILE"
+        missing_keys=1
+    fi
+    if [[ -z "$SCRAPYBARA_API_KEY" ]]; then
+        echo -e "${RED}Error: Falta la llave SCRAPYBARA_API_KEY.${RESET}" | tee -a "$LOG_FILE"
+        missing_keys=1
+    fi
+    return $missing_keys
+}
+
+# Función para ejecutar un archivo Python compatible
+run_python_script() {
+    local file=$1
+    if [[ -f "$file" ]]; then
+        if grep -q "from scrapybara import Scrapybara" "$file"; then
+            echo -e "${BLUE}Ejecutando archivo compatible: $file${RESET}"
+            python3 "$file" | tee -a "$LOG_FILE"
+        else
+            echo -e "${RED}Error: El archivo $file no es compatible.${RESET}" | tee -a "$LOG_FILE"
+        fi
+    else
+        echo -e "${RED}Error: El archivo $file no existe.${RESET}" | tee -a "$LOG_FILE"
+    fi
 }
 
 # Bucle principal para leer comandos
@@ -54,9 +78,13 @@ while true; do
         break
     fi
 
-    # Comprobar si el comando es "check"
-    if [[ "$command" == "check" ]]; then
-        check_compatibility
+    # Ejecutar comandos personalizados
+    if [[ "$command" == "check_requirements" ]]; then
+        check_requirements_installed
+    elif [[ "$command" == "check_keys" ]]; then
+        check_api_keys
+    elif [[ "$command" == *.py ]]; then
+        run_python_script "$command"
     else
         # Ejecutar el comando ingresado
         eval "$command"
